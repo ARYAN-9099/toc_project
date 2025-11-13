@@ -4,24 +4,22 @@
 #include <ctype.h>
 
 #define TAPE_SIZE 8000
-#define TAPE_START 1500    // where input's first char will be placed
-#define COPY_GAP 80        // gap between input end and where reversed copy begins
+#define TAPE_START 1500
+#define COPY_GAP 80
 #define MAX_INPUT 1000
 
 char tape[TAPE_SIZE];
-int head;                 // current head position (index into tape)
-char state[120];          // current TM state
+int head;
+char state[120];
 int step_count = 0;
-int verbose = 1;          // if 1, show each step (frames)
+int verbose = 1;
 int interactive_mode = 1;
 
 int input_start, input_end;
-int copy_start, copy_end; // copy_end inclusive (updated as we write copy)
+int copy_start, copy_end;
 
-/* Output file handle: all main outputs go to this file */
 FILE *out = NULL;
 
-/* Utility wrappers - keep prompts visible on stdout but write all detailed lines to out */
 #define OUT_PRINTF(...) do { if (out) { fprintf(out, __VA_ARGS__); fflush(out); } } while(0)
 #define OUT_PUTC(ch) do { if (out) { fputc((ch), out); fflush(out); } } while(0)
 #define OUT_PUTS(s) do { if (out) { fputs((s), out); fputc('\n', out); fflush(out); } } while(0)
@@ -30,10 +28,8 @@ void init_tape() {
     for (int i = 0; i < TAPE_SIZE; i++) tape[i] = '_';
 }
 
-/* Print a frame to the output file. Additionally, print a small single-line summary to stdout
-   so the interactive user sees progress; full frame stays in the file. */
 void print_tape_frame(int left, int right) {
-    if (!out) return; // safety
+    if (!out) return;
     if (left < 0) left = 0;
     if (right >= TAPE_SIZE) right = TAPE_SIZE - 1;
 
@@ -48,36 +44,28 @@ void print_tape_frame(int left, int right) {
     }
     OUT_PUTC('\n');
 
-    /* small console summary so the user isn't blind while stepping */
     printf("step %d | state: %s | head=%d (see output.txt for full tape)\n", step_count, state, head);
     fflush(stdout);
 }
 
-/* Replace your current step_pause() with this version */
-
 void step_pause() {
     if (!verbose) return;
 
-    /* If automatic mode, only print a concise console summary (no prompt, no fgets) */
     if (!interactive_mode) {
-        /* short console summary so automatic run still shows progress */
         printf("step %d | state: %s | head=%d (see output.txt for full tape)\n", step_count, state, head);
         fflush(stdout);
         return;
     }
 
-    /* interactive mode: prompt and wait for user input */
     printf("Press Enter for next action (type 'a' then Enter to run automatic): ");
     fflush(stdout);
 
-    /* Also record the prompt in the output file for traceability. */
     if (out) { fprintf(out, "[PROMPT] Press Enter for next action (or 'a' to auto)\n"); fflush(out); }
 
     char buf[32];
     if (!fgets(buf, sizeof(buf), stdin)) return;
     if (buf[0] == 'a' || buf[0] == 'A') {
         interactive_mode = 0;
-        /* record the decision */
         if (out) { fprintf(out, "[PROMPT-RESPONSE] automatic mode enabled\n"); fflush(out); }
     } else {
         if (out) { fprintf(out, "[PROMPT-RESPONSE] step-by-step continue\n"); fflush(out); }
@@ -85,7 +73,6 @@ void step_pause() {
 }
 
 
-/* low-level tape operations (head movement + read/write) */
 void write_symbol(char sym) { tape[head] = sym; }
 char read_symbol() { return tape[head]; }
 void move_left() {
@@ -97,7 +84,6 @@ void move_right() {
     head++;
 }
 
-/* Window helper */
 void show_tape_window() {
     int left = input_start - 12;
     int right = copy_end + 12;
@@ -115,20 +101,17 @@ void error_and_exit(const char *msg) {
     exit(1);
 }
 
-/* STEP 1: Copy reverse into safe region (copy_start far to the right so no overlap) */
 void tm_copy_reverse() {
     strcpy(state, "q_copy_reverse_start"); step_count++; show_tape_window(); step_pause();
 
-    int append_pos = copy_start; // start writing reversed copy here
-    copy_end = append_pos - 1;   // will be updated
+    int append_pos = copy_start;
+    copy_end = append_pos - 1;
 
     while (1) {
-        // find rightmost unmarked lowercase char in input region
         int found = -1;
         for (int p = input_end; p >= input_start; p--) {
             if (isalpha((unsigned char)tape[p]) && islower((unsigned char)tape[p])) { found = p; break; }
         }
-        // show seek state
         strcpy(state, "q_seek_rightmost_unmarked"); step_count++; show_tape_window(); step_pause();
 
         if (found == -1) {
@@ -136,17 +119,14 @@ void tm_copy_reverse() {
             break;
         }
 
-        // move head to found (simulate cell-by-cell)
         while (head < found) { move_right(); step_count++; strcpy(state, "move_right"); show_tape_window(); step_pause(); }
         while (head > found) { move_left(); step_count++; strcpy(state, "move_left"); show_tape_window(); step_pause(); }
 
-        // read and mark
         char ch = read_symbol();
         if (!(isalpha((unsigned char)ch) && islower((unsigned char)ch))) error_and_exit("expected lowercase at found");
-        write_symbol((char) toupper(ch)); // mark original
+        write_symbol((char) toupper(ch));
         step_count++; strcpy(state, "q_mark_original"); show_tape_window(); step_pause();
 
-        // move to append_pos and write lowercase copy
         while (head < append_pos) { move_right(); step_count++; strcpy(state, "move_right_to_append"); show_tape_window(); step_pause(); }
         while (head > append_pos) { move_left(); step_count++; strcpy(state, "move_left_to_append"); show_tape_window(); step_pause(); }
 
@@ -156,12 +136,10 @@ void tm_copy_reverse() {
         append_pos++;
         copy_end = append_pos - 1;
 
-        // return head to right side of original region to search again
         head = input_end;
         step_count++; strcpy(state, "q_return_search"); show_tape_window(); step_pause();
     }
 
-    // unmark originals (back to lowercase)
     strcpy(state, "q_unmark_originals"); step_count++; show_tape_window(); step_pause();
     for (int p = input_start; p <= input_end; p++) {
         if (isalpha((unsigned char)tape[p]) && isupper((unsigned char)tape[p])) {
@@ -173,7 +151,6 @@ void tm_copy_reverse() {
     head = input_start; step_count++; strcpy(state, "q_after_unmark"); show_tape_window(); step_pause();
 }
 
-/* STEP 2: find longest overlap t (t from n down to 0) */
 int tm_find_longest_overlap() {
     strcpy(state, "q_find_overlap_start"); step_count++; show_tape_window(); step_pause();
     int n = input_end - input_start + 1;
@@ -211,14 +188,11 @@ int tm_find_longest_overlap() {
     return 0;
 }
 
-/* STEP 3: append rev[k..n-1] to immediate right of original region
-   Because the reversed copy sits in a safe gap, these writes won't clobber the source.
-*/
 void tm_append_remainder(int k) {
     char buf[120]; sprintf(buf, "q_append_remainder_k=%d", k); strcpy(state, buf); step_count++; show_tape_window(); step_pause();
 
     int n = input_end - input_start + 1;
-    int write_pos = input_end + 1; // destination for appended chars
+    int write_pos = input_end + 1;
 
     for (int i = k; i < n; i++) {
         int from = copy_start + i;
@@ -262,14 +236,12 @@ int main() {
 
     print_header();
 
-    /* open output file first */
     out = fopen("output.txt", "w");
     if (!out) {
         fprintf(stderr, "Failed to open output.txt for writing\n");
         return 1;
     }
 
-    /* Print initial banner to both console and file */
     printf("Turing Machine: produce smallest palindrome with given prefix\n");
     printf("All TM trace output will be written to 'output.txt'.\n");
     printf("Input alphabet: lowercase letters (a..z). Example: abc\n");
@@ -284,26 +256,22 @@ int main() {
         return 0;
     }
 
-    /* Clear the rest of the line after scanf (safe guard) */
     {
         int ch;
-        while ((ch = getchar()) != '\n' && ch != EOF) { /* discard */ }
+        while ((ch = getchar()) != '\n' && ch != EOF) { }
     }
 
-    /* Ask user whether to run interactively; read entire line with fgets and parse */
-    printf("Run interactively? (y = step-by-step, n = automatic) [y]: ");
+    printf("Run interactively? (y = step-by-step, n = automatic): ");
     fflush(stdout);
     OUT_PRINTF("[PROMPT] Run interactively? (y = step-by-step, n = automatic) [y]\n");
 
     char choicebuf[32];
     if (fgets(choicebuf, sizeof(choicebuf), stdin) != NULL) {
-        /* find first non-whitespace char */
         char *p = choicebuf;
         while (*p && isspace((unsigned char)*p)) p++;
         if (*p == 'n' || *p == 'N') { interactive_mode = 0; verbose = 1; }
-        else { interactive_mode = 1; verbose = 1; } /* default and for 'y' */
+        else { interactive_mode = 1; verbose = 1; }
     } else {
-        /* EOF or error -> default to interactive */
         interactive_mode = 1; verbose = 1;
     }
 
@@ -327,16 +295,14 @@ int main() {
     for (int i = 0; i < n; i++) tape[input_start + i] = input[i];
     input_end = input_start + n - 1;
 
-    /* Place copy_start sufficiently far to the right with gap to avoid overlap */
     copy_start = input_end + 1 + COPY_GAP;
-    copy_end = input_end; // initialize so window prints sensibly
+    copy_end = input_end;
 
     head = input_start;
     strcpy(state, "q_start");
     step_count = 0;
     show_tape_window();
 
-    /* quick check if already palindrome */
     int already_pal = 1;
     for (int i = 0; i < n/2; i++) {
         if (tape[input_start + i] != tape[input_end - i]) { already_pal = 0; break; }
@@ -354,16 +320,12 @@ int main() {
         return 0;
     }
 
-    /* Step 1: copy reverse into safe region */
     tm_copy_reverse();
 
-    /* Step 2: find overlap */
     int k = tm_find_longest_overlap();
 
-    /* Step 3: append remainder */
     tm_append_remainder(k);
 
-    /* Halt and print final result */
     strcpy(state, "q_halt"); step_count++; show_tape_window();
 
     OUT_PRINTF("\nTM halted. Final tape content (from input start to copy end):\n");
@@ -371,7 +333,6 @@ int main() {
     OUT_PUTC('\n');
     OUT_PRINTF("Total TM steps (simulated head actions + labeled actions): %d\n", step_count);
 
-    /* Also provide a concise console summary */
     printf("\nTM halted. Final result written to output.txt (from input start to copy end):\n");
     for (int i = input_start; i <= copy_end; i++) putchar(tape[i]);
     putchar('\n');
