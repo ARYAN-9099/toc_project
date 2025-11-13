@@ -2,6 +2,10 @@
 
 This project simulates a single-tape Turing Machine (TM) that, given a lowercase string `s` (a..z), appends the minimum number of characters to the right of `s` to form the shortest palindrome that starts with `s`.
 
+This is not a famous algorith but a custom TM design that demonstrates how to solve the problem using basic TM operations.
+
+📺 **[Watch the detailed explanation video](./Explaination.mp4)**
+
 ## Examples
 - `aba` → already a palindrome → `aba`
 - `aab` → `aabaa`
@@ -38,13 +42,15 @@ Goal: produce `rev(s)` to the right of the input without clobbering the source.
 Representative state labels in this phase: `q_copy_reverse_start`, `q_seek_rightmost_unmarked`, `q_mark_original`, `q_write_copy`, `q_copy_reverse_done`, `q_unmark_originals`.
 
 ### Phase 2 — Find Longest Overlap
-Goal: compute the largest `t` (0 ≤ t ≤ |s|) such that the suffix of `s` of length `t` equals the prefix of `rev(s)` of length `t`.
+Goal: find how much of the end of `s` already matches the beginning of the reversed copy.
 
-Intuition: If the end of `s` already matches the beginning of `rev(s)`, we need to append fewer characters to make a palindrome.
+Why: If the last few characters of `s` match the first few characters of `rev(s)`, we don't need to append all of `rev(s)` — just the part that doesn't overlap.
 
-- The TM tries `t = |s|, |s|-1, ..., 0`.
-- For each candidate `t`, it compares characters pairwise: `s[|s|-t + i]` with `rev(s)[i]` for `i = 0..t-1`.
-- It moves the head back and forth to read each cell and checks equality. On full match, it halts this phase with that `t`.
+How it works:
+- The TM starts by checking if the entire reversed string matches (trying the longest possible overlap first).
+- It gradually tries shorter overlaps: checking the last N characters of `s` against the first N characters of `rev(s)`.
+- For each attempt, it moves the head between positions to compare characters one by one.
+- When it finds a matching overlap, it stops and remembers that length.
 
 Representative state labels: `q_find_overlap_start`, `q_read_orig`, `q_read_copy`, `q_match_char`, `q_mismatch`, `q_overlap_found_t=...`.
 
