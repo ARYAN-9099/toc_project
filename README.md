@@ -1,5 +1,12 @@
 # Turing Machine: Smallest Palindrome With Given Prefix
 
+Members-
+BT23CSE045 – Aryan Yadav 
+BT23CSE055 – Pragyan Kantiwal
+BT23CSE056 – Ayush Gautam
+BT23CSE061 – Aryan Mane
+BT23CSE066 – Kovidhraj Kotegiri
+
 This project simulates a single-tape Turing Machine (TM) that, given a lowercase string `s` (a..z), appends the minimum number of characters to the right of `s` to form the shortest palindrome that starts with `s`.
 
 This is not a famous algorith but a custom TM design that demonstrates how to solve the problem using basic TM operations.
